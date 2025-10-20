@@ -1,0 +1,79 @@
+graph TB
+    %% User Interface Layer
+    Client[React Frontend<br/>NextJS + TypeScript]
+
+    %% Load Balancer & API Gateway
+    LB[Azure Load Balancer<br/>+ Application Gateway]
+
+    %% Application Layer
+    API1[Flask API Instance 1<br/>Python + Gunicorn]
+    API2[Flask API Instance 2<br/>Python + Gunicorn]
+    API3[Flask API Instance N<br/>Python + Gunicorn]
+
+    %% Real-time Communication
+    Redis[(Redis Cache<br/>+ WebSocket Sessions)]
+
+    %% AI/ML Processing
+    LLM[OpenAI GPT-4V<br/>Image + Text Processing]
+    Vector[Vector Embeddings<br/>Semantic Product Matching]
+
+    %% Data Storage
+    PG[(PostgreSQL + pgvector<br/>Structured Data + Embeddings)]
+    Storage[Azure Blob Storage<br/>Invoice Files + Audit Trail]
+
+    %% Monitoring & Observability
+    Prometheus[Prometheus<br/>Metrics Collection]
+    Grafana[Grafana<br/>Observability Dashboard]
+
+    %% User Flow
+    Client -->|HTTPS| LB
+    LB -->|Round Robin| API1
+    LB -->|Round Robin| API2
+    LB -->|Round Robin| API3
+
+    %% API to Services
+    API1 <-->|WebSocket Events| Redis
+    API2 <-->|WebSocket Events| Redis
+    API3 <-->|WebSocket Events| Redis
+
+    API1 <-->|SQL Queries + Vectors| PG
+    API2 <-->|SQL Queries + Vectors| PG
+    API3 <-->|SQL Queries + Vectors| PG
+
+    %% AI Processing Pipeline
+    API1 -->|Image Analysis| LLM
+    API2 -->|Image Analysis| LLM
+    API3 -->|Image Analysis| LLM
+
+    LLM -->|Structured Data| Vector
+    Vector -->|Enhanced Matching| PG
+
+    %% File Storage
+    API1 <-->|Upload/Retrieve| Storage
+    API2 <-->|Upload/Retrieve| Storage
+    API3 <-->|Upload/Retrieve| Storage
+
+    %% Monitoring
+    API1 -->|Metrics| Prometheus
+    API2 -->|Metrics| Prometheus
+    API3 -->|Metrics| Prometheus
+    Redis -->|Metrics| Prometheus
+    PG -->|Metrics| Prometheus
+
+    Prometheus --> Grafana
+
+    %% Real-time Updates
+    Redis -.->|WebSocket| Client
+
+    %% Styling
+    classDef frontend fill:#e1f5fe
+    classDef api fill:#f3e5f5
+    classDef data fill:#e8f5e8
+    classDef ai fill:#fff3e0
+    classDef infra fill:#fce4ec
+
+    class Client frontend
+    class API1,API2,API3,LB api
+    class PG,Redis,Storage data
+    class LLM,Vector ai
+    class Prometheus,Grafana infra

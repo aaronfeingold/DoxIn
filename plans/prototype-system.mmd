@@ -1,0 +1,65 @@
+graph TD
+    %% Prototype Phase
+    subgraph "Phase 1: Prototype (Days 1-4)"
+        P1[Single Flask API Container]
+        P2[PostgreSQL Container]
+        P3[Redis Container]
+        P4[React Frontend]
+
+        P1 <--> P2
+        P1 <--> P3
+        P4 --> P1
+    end
+
+    %% Production Phase
+    subgraph "Phase 2: Production Scale (Week 2+)"
+        subgraph "Load Balancing"
+            LB[Azure Application Gateway<br/>+ Load Balancer]
+        end
+
+        subgraph "API Tier - Auto Scaling"
+            A1[Flask API Pod 1]
+            A2[Flask API Pod 2]
+            A3[Flask API Pod N]
+        end
+
+        subgraph "Managed Data Services"
+            RDS[(Azure Database for PostgreSQL<br/>Connection Pooling + Replicas)]
+            REDIS[(Azure Cache for Redis<br/>Cluster Mode)]
+            BLOB[Azure Blob Storage<br/>CDN + Backup]
+        end
+
+        subgraph "Container Orchestration"
+            AKS[Azure Kubernetes Service<br/>Auto-scaling + Health Checks]
+        end
+
+        LB --> A1
+        LB --> A2
+        LB --> A3
+
+        A1 --> RDS
+        A2 --> RDS
+        A3 --> RDS
+
+        A1 <--> REDIS
+        A2 <--> REDIS
+        A3 <--> REDIS
+
+        AKS -.->|Manages| A1
+        AKS -.->|Manages| A2
+        AKS -.->|Manages| A3
+    end
+
+    %% Migration Path
+    P1 -.->|Migrate to| A1
+    P2 -.->|Migrate to| RDS
+    P3 -.->|Migrate to| REDIS
+
+    %% Styling
+    classDef prototype fill:#ffecb3
+    classDef production fill:#c8e6c9
+    classDef managed fill:#e1f5fe
+
+    class P1,P2,P3,P4 prototype
+    class A1,A2,A3,LB,AKS production
+    class RDS,REDIS,BLOB managed
