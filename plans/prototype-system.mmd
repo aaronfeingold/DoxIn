@@ -1,65 +1,144 @@
 graph TD
-    %% Prototype Phase
-    subgraph "Phase 1: Prototype (Days 1-4)"
-        P1[Single Flask API Container]
-        P2[PostgreSQL Container]
-        P3[Redis Container]
-        P4[React Frontend]
+    %% DoxIn Prototype System with AI Chat Agent
+    %% Development Environment Architecture
 
-        P1 <--> P2
-        P1 <--> P3
-        P4 --> P1
+    subgraph "Development Environment"
+        direction TB
+
+        subgraph "Frontend - Next.js Dev Server"
+            UI[Next.js Dev Server<br/>Port 3000<br/>Hot Reload]
+            InvoiceUI[Invoice Management UI]
+            ChatWidget[AI Chat Widget<br/>Floating Assistant]
+            TableView[SQL Results Table<br/>Sortable & Filterable]
+        end
+
+        subgraph "Backend - Flask API Dev"
+            API[Flask API<br/>Port 5000<br/>Debug Mode]
+
+            subgraph "Core Routes"
+                AuthR[/auth - OAuth & JWT]
+                InvR[/invoices - CRUD]
+                JobR[/jobs - Status]
+                ChatR[/chat - AI Agent<br/>NEW]
+            end
+
+            subgraph "AI Chat Services NEW"
+                ChatSvc[Chat Service<br/>Session Management]
+                IntentRouter[Intent Router<br/>Tool Selection]
+                RAGSvc[RAG Service<br/>Doc Search]
+                SQLSvc[Text-to-SQL<br/>Query Generator]
+                StreamSvc[Stream Manager<br/>SSE Events]
+            end
+
+            subgraph "Core Services"
+                LLMSvc[LLM Service<br/>GPT-4]
+                ProcSvc[Processing Service<br/>Invoice Extraction]
+                WSSvc[WebSocket Manager]
+            end
+        end
+
+        subgraph "Data Tier - Docker Containers"
+            PG[(PostgreSQL + pgvector<br/>Port 5433<br/>Local Development)]
+            Redis[(Redis<br/>Port 6379<br/>Cache & Queue)]
+            Qdrant[(Qdrant Vector DB<br/>Port 6333<br/>Documentation Store<br/>NEW)]
+        end
+
+        subgraph "AI/ML Layer"
+            GPT4[OpenAI GPT-4<br/>Vision + Chat<br/>Text-to-SQL]
+            Embed[Embedding Model<br/>text-embedding-3-small]
+        end
+
+        subgraph "Local Storage"
+            Files[Local Filesystem<br/>./uploads<br/>Invoice Documents]
+        end
+
+        subgraph "RAG Pipeline NEW"
+            Indexer[Document Indexer<br/>Markdown Parser<br/>Chunking]
+            VectorGen[Vector Generator<br/>Batch Embeddings]
+        end
     end
 
-    %% Production Phase
-    subgraph "Phase 2: Production Scale (Week 2+)"
-        subgraph "Load Balancing"
-            LB[Azure Application Gateway<br/>+ Load Balancer]
-        end
-
-        subgraph "API Tier - Auto Scaling"
-            A1[Flask API Pod 1]
-            A2[Flask API Pod 2]
-            A3[Flask API Pod N]
-        end
-
-        subgraph "Managed Data Services"
-            RDS[(Azure Database for PostgreSQL<br/>Connection Pooling + Replicas)]
-            REDIS[(Azure Cache for Redis<br/>Cluster Mode)]
-            BLOB[Azure Blob Storage<br/>CDN + Backup]
-        end
-
-        subgraph "Container Orchestration"
-            AKS[Azure Kubernetes Service<br/>Auto-scaling + Health Checks]
-        end
-
-        LB --> A1
-        LB --> A2
-        LB --> A3
-
-        A1 --> RDS
-        A2 --> RDS
-        A3 --> RDS
-
-        A1 <--> REDIS
-        A2 <--> REDIS
-        A3 <--> REDIS
-
-        AKS -.->|Manages| A1
-        AKS -.->|Manages| A2
-        AKS -.->|Manages| A3
+    subgraph "Documentation Sources NEW"
+        FEDocs[frontend/docs/*.md<br/>User Guides<br/>API Docs]
+        BEDocs[backend/docs/*.md<br/>Architecture<br/>Deployment]
     end
 
-    %% Migration Path
-    P1 -.->|Migrate to| A1
-    P2 -.->|Migrate to| RDS
-    P3 -.->|Migrate to| REDIS
+    %% User flow
+    UI --> InvoiceUI & ChatWidget
+    InvoiceUI --> AuthR & InvR
+    ChatWidget --> ChatR
+    ChatWidget -.displays.-> TableView
+
+    %% API routing
+    API --> AuthR & InvR & JobR & ChatR
+
+    %% Chat agent flow
+    ChatR --> ChatSvc
+    ChatSvc --> IntentRouter
+
+    %% Intent routing to tools
+    IntentRouter -->|"doc query"| RAGSvc
+    IntentRouter -->|"data query"| SQLSvc
+    IntentRouter -->|"action"| InvR
+    IntentRouter -->|"status"| JobR
+
+    %% RAG service flow
+    RAGSvc --> Qdrant
+    RAGSvc --> Embed
+    RAGSvc --> GPT4
+
+    %% Text-to-SQL flow
+    SQLSvc --> GPT4
+    SQLSvc --> PG
+    SQLSvc --> Redis
+
+    %% Streaming
+    ChatSvc --> StreamSvc
+    StreamSvc -.SSE.-> ChatWidget
+
+    %% Core invoice processing
+    InvR --> ProcSvc
+    ProcSvc --> GPT4
+    ProcSvc --> PG
+    ProcSvc --> Files
+
+    %% WebSocket
+    WSSvc --> Redis
+    WSSvc -.realtime.-> InvoiceUI
+
+    %% Auth
+    AuthR --> PG
+    AuthR --> Redis
+
+    %% Data persistence
+    ChatSvc --> PG
+    ChatSvc --> Redis
+
+    %% RAG indexing (offline process)
+    FEDocs --> Indexer
+    BEDocs --> Indexer
+    Indexer --> VectorGen
+    VectorGen --> Embed
+    VectorGen --> Qdrant
+
+    %% SQL results to table
+    SQLSvc -.results.-> TableView
 
     %% Styling
-    classDef prototype fill:#ffecb3
-    classDef production fill:#c8e6c9
-    classDef managed fill:#e1f5fe
+    classDef frontend fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef api fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef chatNew fill:#fff9c4,stroke:#f57f17,stroke-width:3px
+    classDef service fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    classDef data fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    classDef vector fill:#f1f8e9,stroke:#33691e,stroke-width:3px
+    classDef llm fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+    classDef docs fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
 
-    class P1,P2,P3,P4 prototype
-    class A1,A2,A3,LB,AKS production
-    class RDS,REDIS,BLOB managed
+    class UI,InvoiceUI,ChatWidget,TableView frontend
+    class API,AuthR,InvR,JobR,ChatR api
+    class ChatSvc,IntentRouter,RAGSvc,SQLSvc,StreamSvc chatNew
+    class LLMSvc,ProcSvc,WSSvc service
+    class PG,Redis,Files data
+    class Qdrant,Indexer,VectorGen vector
+    class GPT4,Embed llm
+    class FEDocs,BEDocs docs

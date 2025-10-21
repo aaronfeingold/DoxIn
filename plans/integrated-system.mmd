@@ -1,0 +1,241 @@
+graph TB
+    %% Complete DoxIn System with AI Chat Agent Integration
+    %% Production GCP Architecture
+
+    subgraph "User Layer"
+        Users[End Users<br/>Invoice Processors]
+        Admins[Admin Users<br/>System Managers]
+    end
+
+    subgraph "Frontend - Vercel"
+        NextJS[Next.js Application]
+
+        subgraph "UI Components"
+            InvoiceUI[Invoice Management<br/>Upload & Processing]
+            ReportUI[Reports & Analytics<br/>Dashboard]
+            ChatUI[AI Chat Assistant<br/>Floating Widget]
+            HelpUI[Context Help<br/>Inline Documentation]
+        end
+    end
+
+    subgraph "Edge Layer"
+        Vercel[Vercel Edge Network<br/>Global CDN]
+        CloudCDN[Google Cloud CDN<br/>Static Assets]
+    end
+
+    subgraph "Load Balancing - GCP"
+        GLB[Cloud Load Balancer<br/>HTTPS/WSS<br/>Cloud Armor WAF]
+    end
+
+    subgraph "Compute Layer - Cloud Run"
+        direction TB
+
+        subgraph "API Service Instances"
+            API1[Cloud Run: API-1<br/>Flask + Gunicorn]
+            API2[Cloud Run: API-2<br/>Flask + Gunicorn]
+            API3[Cloud Run: API-N<br/>Auto-scaling]
+        end
+
+        subgraph "Worker Service"
+            Worker[Cloud Run: Worker<br/>Background Processing<br/>Celery Tasks]
+        end
+
+        subgraph "Qdrant Vector DB"
+            QdrantService[Cloud Run: Qdrant<br/>Vector Search Engine<br/>Persistent Volume]
+        end
+    end
+
+    subgraph "Application Services"
+        direction TB
+
+        subgraph "Core Invoice Services"
+            InvoiceService[Invoice Service<br/>CRUD Operations]
+            ProcessingService[Processing Service<br/>LLM Extraction]
+            JobService[Job Service<br/>Status Tracking]
+            ReportService[Report Service<br/>Analytics]
+        end
+
+        subgraph "AI Chat Agent Services"
+            ChatService[Chat Service<br/>Session Management]
+            IntentService[Intent Router<br/>Tool Selection]
+            RAGService[RAG Service<br/>Document Retrieval]
+            SQLService[Text-to-SQL<br/>Query Generator]
+            StreamService[Stream Manager<br/>SSE Events]
+        end
+
+        subgraph "Supporting Services"
+            AuthService[Auth Service<br/>OAuth + JWT]
+            WSService[WebSocket Manager<br/>Real-time Updates]
+            MetricsService[Metrics Service<br/>Prometheus Exporter]
+        end
+    end
+
+    subgraph "AI/ML Layer"
+        direction LR
+
+        subgraph "LLM Providers"
+            GPT4[OpenAI GPT-4<br/>Vision + Text-to-SQL]
+            Claude[Anthropic Claude<br/>Complex Reasoning]
+            HF[Hugging Face<br/>Llama/Mistral]
+        end
+
+        subgraph "Specialized Models"
+            Embed[text-embedding-3-small<br/>Vector Embeddings]
+            Vision[GPT-4 Vision<br/>Invoice OCR]
+        end
+    end
+
+    subgraph "Data Layer - Multi-Cloud"
+        direction TB
+
+        subgraph "Primary Database"
+            Neon[(Neon PostgreSQL<br/>Serverless<br/>AWS us-east-1<br/>Connection Pooling)]
+        end
+
+        subgraph "Cache & Queue"
+            Memorystore[(Memorystore Redis<br/>GCP Managed<br/>2GB HA)]
+        end
+
+        subgraph "Vector Storage"
+            Qdrant[(Qdrant Collections<br/>Documentation: 2.3k chunks<br/>Invoices: Semantic Search)]
+        end
+
+        subgraph "Object Storage"
+            GCS[Cloud Storage<br/>Invoice Documents<br/>Exports & Backups]
+        end
+    end
+
+    subgraph "Background Tasks - GCP"
+        CloudTasks[Cloud Tasks<br/>Job Queue<br/>Retry Logic]
+    end
+
+    subgraph "External Services"
+        OAuth[Google OAuth<br/>Authentication]
+        Email[SendGrid<br/>Email Notifications]
+    end
+
+    subgraph "Observability - GCP Operations"
+        direction TB
+        CloudLog[Cloud Logging<br/>Centralized Logs]
+        CloudMon[Cloud Monitoring<br/>Metrics & Alerts]
+        CloudTrace[Cloud Trace<br/>Distributed Tracing]
+        ErrorReport[Error Reporting<br/>Exception Tracking]
+    end
+
+    %% User flows
+    Users --> Vercel
+    Admins --> Vercel
+    Vercel --> NextJS
+
+    %% Frontend components
+    NextJS --> InvoiceUI & ReportUI & ChatUI & HelpUI
+
+    %% Edge and load balancing
+    InvoiceUI --> GLB
+    ReportUI --> GLB
+    ChatUI --> GLB
+    HelpUI --> GLB
+
+    CloudCDN -.static assets.-> NextJS
+
+    %% Load balancer to API instances
+    GLB --> API1 & API2 & API3
+
+    %% API instances to core services
+    API1 --> InvoiceService & ChatService & AuthService
+    API2 --> InvoiceService & ChatService & AuthService
+    API3 --> InvoiceService & ChatService & AuthService
+
+    %% Core invoice flow
+    InvoiceService --> ProcessingService
+    InvoiceService --> JobService
+    ProcessingService --> Vision
+    ProcessingService --> CloudTasks
+    CloudTasks --> Worker
+    Worker --> Neon
+    Worker --> GCS
+
+    %% Chat agent flow - Documentation queries
+    ChatUI -.SSE stream.-> StreamService
+    ChatService --> IntentService
+    IntentService -->|doc query| RAGService
+    RAGService --> Embed
+    RAGService --> QdrantService
+    QdrantService --> Qdrant
+    RAGService --> GPT4
+
+    %% Chat agent flow - Data queries
+    IntentService -->|data query| SQLService
+    SQLService --> GPT4
+    SQLService --> Neon
+
+    %% Chat agent flow - Actions
+    IntentService -->|action| InvoiceService
+    IntentService -->|status| JobService
+
+    %% LLM orchestration
+    ChatService --> GPT4 & Claude & HF
+    StreamService --> ChatUI
+
+    %% Report service
+    ReportUI --> ReportService
+    ReportService --> Neon
+    ReportService --> GCS
+
+    %% WebSocket real-time
+    WSService --> Memorystore
+    WSService -.real-time.-> InvoiceUI
+
+    %% Auth flow
+    AuthService --> OAuth
+    AuthService --> Neon
+    AuthService --> Memorystore
+
+    %% Data persistence
+    InvoiceService --> Neon
+    JobService --> Neon
+    ChatService --> Neon
+    ChatService --> Memorystore
+
+    %% Monitoring
+    API1 --> MetricsService
+    API2 --> MetricsService
+    API3 --> MetricsService
+    Worker --> MetricsService
+
+    MetricsService --> CloudMon
+    API1 -.logs.-> CloudLog
+    API2 -.logs.-> CloudLog
+    API3 -.logs.-> CloudLog
+    Worker -.logs.-> CloudLog
+
+    API1 -.traces.-> CloudTrace
+    ChatService -.errors.-> ErrorReport
+
+    %% Notifications
+    Worker --> Email
+
+    %% Styling
+    classDef user fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef frontend fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef edge fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef compute fill:#e8f5e9,stroke:#1b5e20,stroke-width:3px
+    classDef service fill:#e0f7fa,stroke:#006064,stroke-width:2px
+    classDef chat fill:#fff9c4,stroke:#f57f17,stroke-width:3px
+    classDef llm fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+    classDef data fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    classDef vector fill:#f1f8e9,stroke:#33691e,stroke-width:2px
+    classDef monitor fill:#e0f2f1,stroke:#004d40,stroke-width:2px
+    classDef external fill:#efebe9,stroke:#3e2723,stroke-width:1px
+
+    class Users,Admins user
+    class NextJS,InvoiceUI,ReportUI,ChatUI,HelpUI frontend
+    class Vercel,CloudCDN edge
+    class GLB,API1,API2,API3,Worker,QdrantService compute
+    class InvoiceService,ProcessingService,JobService,ReportService,AuthService,WSService,MetricsService service
+    class ChatService,IntentService,RAGService,SQLService,StreamService chat
+    class GPT4,Claude,HF,Embed,Vision llm
+    class Neon,Memorystore,GCS data
+    class Qdrant,QdrantService vector
+    class CloudLog,CloudMon,CloudTrace,ErrorReport monitor
+    class OAuth,Email,CloudTasks external

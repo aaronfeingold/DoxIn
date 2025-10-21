@@ -1,0 +1,218 @@
+graph TB
+    %% GCP Production Deployment Architecture
+    %% Infrastructure as Code with Terraform
+
+    subgraph "DNS & Edge"
+        DNS[Cloud DNS<br/>doxin.com<br/>app.doxin.com]
+        CloudArmor[Cloud Armor<br/>WAF + DDoS Protection<br/>Rate Limiting]
+    end
+
+    subgraph "Global Load Balancing"
+        GLB[Cloud Load Balancer<br/>Global HTTPS<br/>SSL Termination]
+        BackendService[Backend Service<br/>Health Checks<br/>Session Affinity]
+    end
+
+    subgraph "GCP Region: us-central1"
+        direction TB
+
+        subgraph "Compute - Cloud Run"
+            direction LR
+
+            subgraph "API Service"
+                API_Rev1[api-service<br/>Revision: abc123<br/>Min: 2, Max: 20<br/>2vCPU, 4GB RAM]
+                API_Rev2[api-service<br/>Revision: abc124<br/>Traffic: 0%<br/>Blue-Green Deploy]
+            end
+
+            subgraph "Worker Service"
+                Worker_Rev1[worker-service<br/>Revision: def456<br/>Min: 1, Max: 10<br/>1vCPU, 2GB RAM]
+            end
+
+            subgraph "Qdrant Service"
+                Qdrant_Rev1[qdrant-service<br/>Revision: ghi789<br/>Min: 1, Max: 3<br/>2vCPU, 8GB RAM<br/>50GB SSD Volume]
+            end
+        end
+
+        subgraph "Networking"
+            VPC[VPC Network<br/>Private IP Range<br/>10.0.0.0/16]
+            Connector[Serverless VPC Connector<br/>Cloud Run → VPC]
+            CloudNAT[Cloud NAT<br/>Egress Gateway]
+        end
+
+        subgraph "Managed Services"
+            Memorystore[(Memorystore Redis<br/>2GB Standard<br/>HA Configuration<br/>Private IP)]
+
+            PubSub[Cloud Pub/Sub<br/>Event Streaming<br/>Worker Tasks]
+
+            CloudTasks[Cloud Tasks<br/>Job Queue<br/>Retry + DLQ]
+
+            SecretManager[Secret Manager<br/>API Keys<br/>DB Credentials]
+        end
+
+        subgraph "Storage"
+            GCS_Docs[GCS Bucket: documents<br/>Regional<br/>Lifecycle: 90d → Nearline]
+
+            GCS_Exports[GCS Bucket: exports<br/>Regional<br/>Lifecycle: 30d → Coldline]
+
+            GCS_Backups[GCS Bucket: backups<br/>Multi-regional<br/>Retention: 1 year]
+
+            GCS_Qdrant[GCS Persistent Disk<br/>Qdrant Data<br/>50GB SSD<br/>Automated Snapshots]
+        end
+    end
+
+    subgraph "External: AWS us-east-1"
+        Neon[(Neon PostgreSQL<br/>Serverless Database<br/>Branch: production<br/>Connection Pooling)]
+    end
+
+    subgraph "Container Registry"
+        GAR[Google Artifact Registry<br/>us-central1<br/>Docker Images]
+
+        subgraph "Image Repositories"
+            IMG_API[api-service:latest<br/>api-service:abc123]
+            IMG_Worker[worker-service:latest<br/>worker-service:def456]
+            IMG_Qdrant[qdrant:latest<br/>qdrant:ghi789]
+        end
+    end
+
+    subgraph "CI/CD Pipeline"
+        GitHub[GitHub<br/>Source Repository<br/>main branch]
+
+        GitHubActions[GitHub Actions<br/>Build & Test<br/>Docker Build<br/>Deploy]
+
+        CloudBuild[Cloud Build<br/>Image Building<br/>Vulnerability Scan]
+    end
+
+    subgraph "Observability Suite"
+        direction TB
+
+        CloudLogging[Cloud Logging<br/>Centralized Logs<br/>30d Retention<br/>Export to BigQuery]
+
+        CloudMonitoring[Cloud Monitoring<br/>Metrics & Dashboards<br/>Uptime Checks<br/>SLO Tracking]
+
+        CloudTrace[Cloud Trace<br/>Distributed Tracing<br/>Latency Analysis]
+
+        ErrorReporting[Error Reporting<br/>Exception Tracking<br/>Slack Alerts]
+
+        CloudProfiler[Cloud Profiler<br/>CPU & Memory<br/>Performance Analysis]
+    end
+
+    subgraph "Security & IAM"
+        IAM[Cloud IAM<br/>Service Accounts<br/>Workload Identity]
+
+        KMS[Cloud KMS<br/>Encryption Keys<br/>CMEK for GCS]
+
+        VPCFirewall[VPC Firewall Rules<br/>Ingress/Egress<br/>Internal Only]
+    end
+
+    subgraph "Monitoring & Alerting"
+        AlertPolicy[Alert Policies<br/>Error Rate > 5%<br/>Latency P95 > 1s<br/>CPU > 80%]
+
+        NotifChannel[Notification Channels<br/>PagerDuty<br/>Slack<br/>Email]
+
+        UptimeCheck[Uptime Checks<br/>Global Monitoring<br/>5 locations]
+    end
+
+    %% DNS Flow
+    DNS --> GLB
+    GLB --> CloudArmor
+    CloudArmor --> BackendService
+
+    %% Load balancer to services
+    BackendService --> API_Rev1
+    BackendService -.canary 10%.-> API_Rev2
+
+    %% API service connections
+    API_Rev1 --> Connector
+    API_Rev2 --> Connector
+    Worker_Rev1 --> Connector
+    Qdrant_Rev1 --> Connector
+
+    %% VPC networking
+    Connector --> VPC
+    VPC --> Memorystore
+    VPC --> CloudNAT
+
+    %% External connections
+    API_Rev1 --> Neon
+    Worker_Rev1 --> Neon
+    CloudNAT --> Neon
+
+    %% Service to service
+    API_Rev1 --> Qdrant_Rev1
+    API_Rev1 --> Memorystore
+    Worker_Rev1 --> Memorystore
+    API_Rev1 --> CloudTasks
+    CloudTasks --> Worker_Rev1
+    API_Rev1 --> PubSub
+    PubSub --> Worker_Rev1
+
+    %% Storage connections
+    API_Rev1 --> GCS_Docs
+    Worker_Rev1 --> GCS_Docs
+    API_Rev1 --> GCS_Exports
+    Qdrant_Rev1 --> GCS_Qdrant
+
+    %% Secrets
+    API_Rev1 --> SecretManager
+    Worker_Rev1 --> SecretManager
+    Qdrant_Rev1 --> SecretManager
+
+    %% CI/CD flow
+    GitHub --> GitHubActions
+    GitHubActions --> CloudBuild
+    CloudBuild --> GAR
+    GAR --> IMG_API & IMG_Worker & IMG_Qdrant
+    IMG_API --> API_Rev1 & API_Rev2
+    IMG_Worker --> Worker_Rev1
+    IMG_Qdrant --> Qdrant_Rev1
+
+    %% Monitoring connections
+    API_Rev1 -.logs.-> CloudLogging
+    Worker_Rev1 -.logs.-> CloudLogging
+    Qdrant_Rev1 -.logs.-> CloudLogging
+
+    API_Rev1 -.metrics.-> CloudMonitoring
+    Worker_Rev1 -.metrics.-> CloudMonitoring
+    Memorystore -.metrics.-> CloudMonitoring
+
+    API_Rev1 -.traces.-> CloudTrace
+    API_Rev1 -.errors.-> ErrorReporting
+    API_Rev1 -.profiling.-> CloudProfiler
+
+    CloudMonitoring --> AlertPolicy
+    AlertPolicy --> NotifChannel
+    UptimeCheck --> CloudMonitoring
+
+    %% Security
+    IAM -.controls.-> API_Rev1
+    IAM -.controls.-> Worker_Rev1
+    IAM -.controls.-> Qdrant_Rev1
+    KMS -.encrypts.-> GCS_Docs
+    KMS -.encrypts.-> GCS_Backups
+    VPCFirewall -.protects.-> VPC
+
+    %% Backup flow
+    Neon -.backup.-> GCS_Backups
+    GCS_Qdrant -.snapshot.-> GCS_Backups
+
+    %% Styling
+    classDef dns fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef lb fill:#fff3e0,stroke:#e65100,stroke-width:3px
+    classDef compute fill:#e8f5e9,stroke:#1b5e20,stroke-width:3px
+    classDef network fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef managed fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    classDef storage fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    classDef database fill:#e0f2f1,stroke:#004d40,stroke-width:2px
+    classDef cicd fill:#ede7f6,stroke:#311b92,stroke-width:2px
+    classDef monitor fill:#e8eaf6,stroke:#1a237e,stroke-width:2px
+    classDef security fill:#fbe9e7,stroke:#bf360c,stroke-width:2px
+
+    class DNS,CloudArmor dns
+    class GLB,BackendService lb
+    class API_Rev1,API_Rev2,Worker_Rev1,Qdrant_Rev1 compute
+    class VPC,Connector,CloudNAT network
+    class Memorystore,PubSub,CloudTasks,SecretManager managed
+    class GCS_Docs,GCS_Exports,GCS_Backups,GCS_Qdrant storage
+    class Neon database
+    class GitHub,GitHubActions,CloudBuild,GAR,IMG_API,IMG_Worker,IMG_Qdrant cicd
+    class CloudLogging,CloudMonitoring,CloudTrace,ErrorReporting,CloudProfiler,AlertPolicy,NotifChannel,UptimeCheck monitor
+    class IAM,KMS,VPCFirewall security

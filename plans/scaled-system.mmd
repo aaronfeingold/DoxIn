@@ -1,79 +1,184 @@
 graph TB
-    %% User Interface Layer
-    Client[React Frontend<br/>NextJS + TypeScript]
+    %% DoxIn Production System - GCP Architecture with AI Chat Agent
+    %% Fully scaled cloud-native deployment
 
-    %% Load Balancer & API Gateway
-    LB[Azure Load Balancer<br/>+ Application Gateway]
+    subgraph "User Layer"
+        Users[End Users<br/>Invoice Processors]
+        Admins[Admin Users]
+    end
 
-    %% Application Layer
-    API1[Flask API Instance 1<br/>Python + Gunicorn]
-    API2[Flask API Instance 2<br/>Python + Gunicorn]
-    API3[Flask API Instance N<br/>Python + Gunicorn]
+    subgraph "Edge Network"
+        Vercel[Vercel Edge<br/>Global CDN<br/>Next.js SSR]
+        CloudCDN[Cloud CDN<br/>Static Assets]
+    end
 
-    %% Real-time Communication
-    Redis[(Redis Cache<br/>+ WebSocket Sessions)]
+    subgraph "GCP Load Balancing"
+        GLB[Cloud Load Balancer<br/>Global HTTPS<br/>Cloud Armor WAF]
+    end
 
-    %% AI/ML Processing
-    LLM[OpenAI GPT-4V<br/>Image + Text Processing]
-    Vector[Vector Embeddings<br/>Semantic Product Matching]
+    subgraph "GCP Region: us-central1"
+        direction TB
 
-    %% Data Storage
-    PG[(PostgreSQL + pgvector<br/>Structured Data + Embeddings)]
-    Storage[Azure Blob Storage<br/>Invoice Files + Audit Trail]
+        subgraph "Cloud Run Services"
+            API[API Service<br/>2-20 instances<br/>2vCPU, 4GB RAM]
+            Worker[Worker Service<br/>1-10 instances<br/>Background Jobs]
+            QdrantSvc[Qdrant Service<br/>1-3 instances<br/>2vCPU, 8GB RAM<br/>Vector Search<br/>NEW]
+        end
 
-    %% Monitoring & Observability
-    Prometheus[Prometheus<br/>Metrics Collection]
-    Grafana[Grafana<br/>Observability Dashboard]
+        subgraph "Managed Services"
+            Memorystore[(Memorystore Redis<br/>2GB HA<br/>Cache & Queue)]
+            CloudTasks[Cloud Tasks<br/>Job Queue<br/>Retry Logic]
+            SecretMgr[Secret Manager<br/>API Keys<br/>Credentials]
+        end
 
-    %% User Flow
-    Client -->|HTTPS| LB
-    LB -->|Round Robin| API1
-    LB -->|Round Robin| API2
-    LB -->|Round Robin| API3
+        subgraph "Storage"
+            GCS[Cloud Storage<br/>Buckets<br/>Documents & Exports]
+            QdrantVol[Persistent Disk<br/>50GB SSD<br/>Qdrant Data<br/>NEW]
+        end
 
-    %% API to Services
-    API1 <-->|WebSocket Events| Redis
-    API2 <-->|WebSocket Events| Redis
-    API3 <-->|WebSocket Events| Redis
+        subgraph "Networking"
+            VPC[VPC Network<br/>Private IPs]
+            CloudNAT[Cloud NAT<br/>Egress Gateway]
+        end
+    end
 
-    API1 <-->|SQL Queries + Vectors| PG
-    API2 <-->|SQL Queries + Vectors| PG
-    API3 <-->|SQL Queries + Vectors| PG
+    subgraph "External: AWS us-east-1"
+        Neon[(Neon PostgreSQL<br/>Serverless<br/>Auto-scaling<br/>Connection Pooling)]
+    end
 
-    %% AI Processing Pipeline
-    API1 -->|Image Analysis| LLM
-    API2 -->|Image Analysis| LLM
-    API3 -->|Image Analysis| LLM
+    subgraph "AI/ML Providers"
+        GPT4[OpenAI GPT-4<br/>Vision + Chat<br/>Text-to-SQL]
+        Claude[Anthropic Claude<br/>Complex Reasoning]
+        HF[Hugging Face<br/>Llama/Mistral<br/>Cost-Effective]
+        Embed[Embedding API<br/>text-embedding-3-small]
+    end
 
-    LLM -->|Structured Data| Vector
-    Vector -->|Enhanced Matching| PG
+    subgraph "Application Services"
+        direction LR
 
-    %% File Storage
-    API1 <-->|Upload/Retrieve| Storage
-    API2 <-->|Upload/Retrieve| Storage
-    API3 <-->|Upload/Retrieve| Storage
+        subgraph "Core Services"
+            InvSvc[Invoice Service]
+            ProcSvc[Processing Service]
+            AuthSvc[Auth Service]
+        end
+
+        subgraph "AI Chat Agent NEW"
+            ChatSvc[Chat Service<br/>Session Mgmt]
+            IntentSvc[Intent Router<br/>Tool Selection]
+            RAGSvc[RAG Service<br/>Doc Retrieval]
+            SQLSvc[Text-to-SQL<br/>Query Generator]
+            StreamSvc[Stream Manager<br/>SSE Events]
+        end
+    end
+
+    subgraph "GCP Observability"
+        CloudLog[Cloud Logging<br/>30d Retention]
+        CloudMon[Cloud Monitoring<br/>Metrics & Alerts]
+        CloudTrace[Cloud Trace<br/>Distributed Tracing]
+    end
+
+    %% User flow
+    Users --> Vercel
+    Admins --> Vercel
+    Vercel --> GLB
+    CloudCDN -.static.-> Vercel
+
+    %% Load balancing
+    GLB --> API
+
+    %% API to services
+    API --> InvSvc & ChatSvc & AuthSvc
+
+    %% Chat agent flow
+    ChatSvc --> IntentSvc
+    IntentSvc -->|doc query| RAGSvc
+    IntentSvc -->|data query| SQLSvc
+    IntentSvc -->|action| InvSvc
+
+    %% RAG service
+    RAGSvc --> QdrantSvc
+    RAGSvc --> Embed
+    RAGSvc --> GPT4
+    QdrantSvc --> QdrantVol
+
+    %% Text-to-SQL
+    SQLSvc --> GPT4
+    SQLSvc --> Neon
+    SQLSvc --> Memorystore
+
+    %% Streaming
+    ChatSvc --> StreamSvc
+    StreamSvc -.SSE.-> Vercel
+
+    %% Core invoice processing
+    InvSvc --> ProcSvc
+    ProcSvc --> CloudTasks
+    CloudTasks --> Worker
+    Worker --> Neon
+    Worker --> GCS
+    Worker --> GPT4
+
+    %% LLM orchestration
+    ChatSvc --> GPT4 & Claude & HF
+    ProcSvc --> GPT4
+
+    %% Data persistence
+    API --> Memorystore
+    API --> Neon
+    Worker --> Memorystore
+    ChatSvc --> Neon
+    ChatSvc --> Memorystore
+
+    %% VPC networking
+    API --> VPC
+    Worker --> VPC
+    QdrantSvc --> VPC
+    VPC --> Memorystore
+    VPC --> CloudNAT
+    CloudNAT --> Neon
+
+    %% Secrets
+    API --> SecretMgr
+    Worker --> SecretMgr
+    QdrantSvc --> SecretMgr
+
+    %% Storage
+    API --> GCS
+    Worker --> GCS
 
     %% Monitoring
-    API1 -->|Metrics| Prometheus
-    API2 -->|Metrics| Prometheus
-    API3 -->|Metrics| Prometheus
-    Redis -->|Metrics| Prometheus
-    PG -->|Metrics| Prometheus
+    API -.logs.-> CloudLog
+    Worker -.logs.-> CloudLog
+    QdrantSvc -.logs.-> CloudLog
 
-    Prometheus --> Grafana
+    API -.metrics.-> CloudMon
+    Worker -.metrics.-> CloudMon
+    Memorystore -.metrics.-> CloudMon
 
-    %% Real-time Updates
-    Redis -.->|WebSocket| Client
+    API -.traces.-> CloudTrace
 
     %% Styling
-    classDef frontend fill:#e1f5fe
-    classDef api fill:#f3e5f5
-    classDef data fill:#e8f5e8
-    classDef ai fill:#fff3e0
-    classDef infra fill:#fce4ec
+    classDef user fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef edge fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef lb fill:#fff3e0,stroke:#e65100,stroke-width:3px
+    classDef compute fill:#e8f5e9,stroke:#1b5e20,stroke-width:3px
+    classDef chatNew fill:#fff9c4,stroke:#f57f17,stroke-width:3px
+    classDef managed fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    classDef storage fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+    classDef vector fill:#f1f8e9,stroke:#33691e,stroke-width:3px
+    classDef database fill:#e0f2f1,stroke:#004d40,stroke-width:2px
+    classDef llm fill:#fff3e0,stroke:#ff6f00,stroke-width:2px
+    classDef monitor fill:#e8eaf6,stroke:#1a237e,stroke-width:2px
 
-    class Client frontend
-    class API1,API2,API3,LB api
-    class PG,Redis,Storage data
-    class LLM,Vector ai
-    class Prometheus,Grafana infra
+    class Users,Admins user
+    class Vercel,CloudCDN edge
+    class GLB lb
+    class API,Worker compute
+    class QdrantSvc,QdrantVol vector
+    class ChatSvc,IntentSvc,RAGSvc,SQLSvc,StreamSvc chatNew
+    class InvSvc,ProcSvc,AuthSvc,VPC,CloudNAT managed
+    class Memorystore,CloudTasks,SecretMgr managed
+    class GCS storage
+    class Neon database
+    class GPT4,Claude,HF,Embed llm
+    class CloudLog,CloudMon,CloudTrace monitor

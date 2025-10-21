@@ -1,0 +1,174 @@
+graph TB
+    %% AI Chat Agent Feature Layer Architecture
+    %% New self-serving chatbot with RAG, Text-to-SQL, and tool execution
+
+    subgraph "User Interface"
+        ChatWidget[Chat Widget<br/>Floating Assistant<br/>Minimizable]
+        HelpPanel[Context Help<br/>Page-Specific Tips<br/>Inline Suggestions]
+        TableView[Results Table<br/>SQL Query Results<br/>Sortable & Filterable]
+    end
+
+    subgraph "Chat API Endpoints"
+        direction TB
+        SessionAPI[POST /chat/sessions<br/>Create Chat Session]
+        MessageAPI[POST /chat/sessions/:id/messages<br/>SSE Streaming]
+        HistoryAPI[GET /chat/sessions/:id/messages<br/>Chat History]
+        FeedbackAPI[POST /chat/feedback<br/>User Feedback]
+    end
+
+    subgraph "Chat Service Core"
+        direction TB
+
+        IntentRouter[Intent Router<br/>Classify User Request<br/>Route to Tools]
+
+        ContextManager[Context Manager<br/>Session History<br/>User Preferences<br/>Page Context]
+
+        StreamManager[Stream Manager<br/>SSE Event Generator<br/>Token Buffering]
+    end
+
+    subgraph "Agent Tools"
+        direction TB
+
+        subgraph "Documentation Tool"
+            RAGTool[RAG Search Tool<br/>Vector Similarity<br/>Hybrid Search]
+        end
+
+        subgraph "Data Query Tool"
+            TextToSQL[Text-to-SQL Generator<br/>Natural Language → SQL<br/>Query Validation]
+            SQLExecutor[SQL Executor<br/>Safe Query Execution<br/>Result Formatting]
+        end
+
+        subgraph "Action Tools"
+            InvoiceTool[Invoice Actions<br/>Create/Update/Delete<br/>Requires Confirmation]
+            JobTool[Job Status Tool<br/>Check Processing<br/>Real-time Updates]
+            ExportTool[Export Tool<br/>CSV/JSON/PDF<br/>Custom Reports]
+        end
+    end
+
+    subgraph "AI/ML Services"
+        direction TB
+
+        LLMOrchestrator[LLM Orchestrator<br/>Provider Selection<br/>Fallback Logic]
+
+        GPT4[OpenAI GPT-4<br/>Primary LLM<br/>Text-to-SQL Expert]
+
+        Claude[Anthropic Claude<br/>Complex Reasoning<br/>Long Context]
+
+        HuggingFace[Hugging Face<br/>Llama/Mistral<br/>Cost-Effective Fallback]
+
+        EmbedModel[Embedding Model<br/>text-embedding-3-small<br/>1536 dimensions]
+    end
+
+    subgraph "Vector Database - Qdrant"
+        direction TB
+
+        QdrantAPI[Qdrant HTTP API<br/>Port 6333]
+
+        DocCollection[Documentation Collection<br/>frontend/docs + backend/docs<br/>Chunked Markdown]
+
+        InvoiceCollection[Invoice Semantic Collection<br/>Invoice Descriptions<br/>Product Catalog]
+    end
+
+    subgraph "RAG Pipeline"
+        direction TB
+
+        DocIndexer[Document Indexer<br/>Markdown Parser<br/>Chunking Strategy]
+
+        Embedder[Embedding Generator<br/>Batch Processing<br/>Vector Creation]
+
+        Retriever[Document Retriever<br/>Vector Search<br/>Re-ranking]
+    end
+
+    subgraph "Data Access Layer"
+        direction TB
+
+        QueryBuilder[SQL Query Builder<br/>Template Library<br/>Parameter Binding]
+
+        QueryValidator[Query Validator<br/>Permission Check<br/>Scope Enforcement]
+
+        ResultFormatter[Result Formatter<br/>JSON/Table/Chart<br/>Pagination]
+    end
+
+    subgraph "Storage & Cache"
+        PostgresDB[(PostgreSQL<br/>Invoice Data<br/>User Sessions)]
+        RedisCache[(Redis<br/>Chat Context<br/>Query Cache)]
+        QdrantDB[(Qdrant<br/>Vector Store<br/>Document Embeddings)]
+    end
+
+    %% User interactions
+    ChatWidget --> MessageAPI
+    HelpPanel --> SessionAPI
+    TableView -.displays.-> ResultFormatter
+
+    %% API to services
+    SessionAPI --> ContextManager
+    MessageAPI --> IntentRouter
+    HistoryAPI --> ContextManager
+
+    %% Intent routing
+    IntentRouter -->|documentation query| RAGTool
+    IntentRouter -->|data query| TextToSQL
+    IntentRouter -->|action request| InvoiceTool
+    IntentRouter -->|status check| JobTool
+    IntentRouter -->|export request| ExportTool
+
+    %% RAG tool flow
+    RAGTool --> Retriever
+    Retriever --> QdrantAPI
+    QdrantAPI --> DocCollection
+
+    %% Text-to-SQL flow
+    TextToSQL --> QueryBuilder
+    QueryBuilder --> QueryValidator
+    QueryValidator --> SQLExecutor
+    SQLExecutor --> ResultFormatter
+    ResultFormatter --> TableView
+
+    %% LLM orchestration
+    IntentRouter --> LLMOrchestrator
+    RAGTool --> LLMOrchestrator
+    TextToSQL --> LLMOrchestrator
+
+    LLMOrchestrator --> GPT4
+    LLMOrchestrator --> Claude
+    LLMOrchestrator --> HuggingFace
+
+    %% Embedding for RAG
+    RAGTool --> EmbedModel
+    EmbedModel --> QdrantAPI
+
+    %% Context and streaming
+    ContextManager --> RedisCache
+    LLMOrchestrator --> StreamManager
+    StreamManager -.SSE stream.-> ChatWidget
+
+    %% RAG pipeline (offline)
+    DocIndexer -.indexes.-> Embedder
+    Embedder --> QdrantAPI
+
+    %% Data access
+    SQLExecutor --> PostgresDB
+    QueryBuilder -.caches.-> RedisCache
+    ContextManager --> PostgresDB
+
+    %% Action tools
+    InvoiceTool --> PostgresDB
+    JobTool --> PostgresDB
+    ExportTool --> PostgresDB
+
+    %% Styling
+    classDef ui fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef api fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef service fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    classDef tool fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef llm fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    classDef vector fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    classDef data fill:#e0f2f1,stroke:#004d40,stroke-width:2px
+
+    class ChatWidget,HelpPanel,TableView ui
+    class SessionAPI,MessageAPI,HistoryAPI,FeedbackAPI api
+    class IntentRouter,ContextManager,StreamManager,LLMOrchestrator service
+    class RAGTool,TextToSQL,SQLExecutor,InvoiceTool,JobTool,ExportTool tool
+    class GPT4,Claude,HuggingFace,EmbedModel llm
+    class QdrantAPI,DocCollection,InvoiceCollection,DocIndexer,Embedder,Retriever vector
+    class PostgresDB,RedisCache,QdrantDB,QueryBuilder,QueryValidator,ResultFormatter data

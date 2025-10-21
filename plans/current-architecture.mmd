@@ -1,0 +1,129 @@
+graph TB
+    %% Current DoxIn System Architecture
+    %% Represents the existing invoice processing system
+
+    subgraph "Client Layer"
+        WebUI[Next.js Frontend<br/>React Components]
+        MobileUI[Mobile Browser<br/>Responsive UI]
+    end
+
+    subgraph "Edge & CDN"
+        Vercel[Vercel Edge Network<br/>Static Assets + SSR]
+        CDN[Cloud CDN<br/>Document Cache]
+    end
+
+    subgraph "API Gateway"
+        LB[Load Balancer<br/>HTTPS/WSS]
+    end
+
+    subgraph "Application Layer - Flask API"
+        direction TB
+
+        subgraph "Route Handlers"
+            AuthRoute["/auth/*<br/>OAuth & JWT"]
+            InvoiceRoute["/invoices/*<br/>CRUD Operations"]
+            JobRoute["/jobs/*<br/>Processing Status"]
+            ReportRoute["/reports/*<br/>Analytics"]
+            AdminRoute["/admin/*<br/>Admin Panel"]
+            HealthRoute["/health<br/>System Health"]
+        end
+
+        subgraph "Core Services"
+            LLMService[LLM Service<br/>GPT-4 Vision]
+            ProcessorService[Async Processor<br/>Celery Workers]
+            WSManager[WebSocket Manager<br/>Real-time Updates]
+            MetricsService[Metrics Service<br/>Prometheus]
+        end
+
+        subgraph "Business Logic"
+            InvoiceLogic[Invoice Processing<br/>Validation & Rules]
+            AuthLogic[Authentication<br/>Authorization RBAC]
+            ReportLogic[Report Generation<br/>SQL Queries]
+        end
+    end
+
+    subgraph "Data Layer"
+        PostgreSQL[(PostgreSQL<br/>pgvector Extension<br/>Structured Data)]
+        Redis[(Redis<br/>Sessions & Cache<br/>Task Queue)]
+        FileStorage[Cloud Storage<br/>GCS/Azure Blob<br/>Invoice Documents]
+    end
+
+    subgraph "External Services"
+        OpenAI[OpenAI API<br/>GPT-4 Vision<br/>Text Embeddings]
+        Anthropic[Anthropic API<br/>Claude<br/>Alternative LLM]
+        OAuth[Google OAuth<br/>Authentication]
+    end
+
+    subgraph "Monitoring Stack"
+        Prometheus[Prometheus<br/>Metrics Collection]
+        Grafana[Grafana<br/>Dashboards]
+        CloudLog[Cloud Logging<br/>Centralized Logs]
+    end
+
+    %% Client connections
+    WebUI --> Vercel
+    MobileUI --> Vercel
+    Vercel --> LB
+
+    %% Load balancer to routes
+    LB --> AuthRoute
+    LB --> InvoiceRoute
+    LB --> JobRoute
+    LB --> ReportRoute
+    LB --> AdminRoute
+    LB --> HealthRoute
+
+    %% Routes to services
+    AuthRoute --> AuthLogic
+    InvoiceRoute --> InvoiceLogic
+    InvoiceRoute --> LLMService
+    JobRoute --> ProcessorService
+    ReportRoute --> ReportLogic
+
+    %% Services to data
+    InvoiceLogic --> PostgreSQL
+    InvoiceLogic --> FileStorage
+    AuthLogic --> PostgreSQL
+    AuthLogic --> Redis
+    ReportLogic --> PostgreSQL
+
+    LLMService --> OpenAI
+    LLMService --> Anthropic
+
+    ProcessorService --> Redis
+    ProcessorService --> PostgreSQL
+    ProcessorService --> FileStorage
+
+    WSManager --> Redis
+    WSManager -.Real-time.-> WebUI
+
+    %% External services
+    AuthRoute --> OAuth
+
+    %% Monitoring
+    AuthRoute --> MetricsService
+    InvoiceRoute --> MetricsService
+    JobRoute --> MetricsService
+    MetricsService --> Prometheus
+    Prometheus --> Grafana
+
+    AuthRoute -.logs.-> CloudLog
+    InvoiceRoute -.logs.-> CloudLog
+    JobRoute -.logs.-> CloudLog
+
+    %% Styling
+    classDef client fill:#e1f5fe,stroke:#01579b
+    classDef edge fill:#f3e5f5,stroke:#4a148c
+    classDef api fill:#fff3e0,stroke:#e65100
+    classDef service fill:#e8f5e9,stroke:#1b5e20
+    classDef data fill:#fce4ec,stroke:#880e4f
+    classDef external fill:#f1f8e9,stroke:#33691e
+    classDef monitor fill:#e0f2f1,stroke:#004d40
+
+    class WebUI,MobileUI client
+    class Vercel,CDN edge
+    class LB,AuthRoute,InvoiceRoute,JobRoute,ReportRoute,AdminRoute,HealthRoute api
+    class LLMService,ProcessorService,WSManager,MetricsService,InvoiceLogic,AuthLogic,ReportLogic service
+    class PostgreSQL,Redis,FileStorage data
+    class OpenAI,Anthropic,OAuth external
+    class Prometheus,Grafana,CloudLog monitor

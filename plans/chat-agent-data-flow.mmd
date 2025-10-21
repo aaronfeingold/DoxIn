@@ -1,0 +1,150 @@
+sequenceDiagram
+    %% Chat Agent Data Flow - Complete Interaction Patterns
+
+    participant User
+    participant ChatUI as Chat Widget
+    participant API as Flask API
+    participant Intent as Intent Router
+    participant RAG as RAG Tool
+    participant SQL as Text-to-SQL Tool
+    participant Qdrant as Qdrant VectorDB
+    participant Embed as Embedding Model
+    participant LLM as LLM Provider
+    participant DB as PostgreSQL
+    participant Redis as Redis Cache
+    participant Table as Table View
+
+    %% Scenario 1: Documentation Query with RAG
+    Note over User,Table: Scenario 1: Documentation Query
+    User->>ChatUI: "How do I upload invoices?"
+    ChatUI->>API: POST /chat/sessions/:id/messages
+    API->>Intent: Classify intent
+    Intent-->>API: Intent: documentation_query
+
+    API->>RAG: search_documentation(query)
+    RAG->>Embed: Generate query embedding
+    Embed-->>RAG: Vector [1536 dims]
+
+    RAG->>Qdrant: Vector similarity search
+    Note over Qdrant: Search DocCollection<br/>top_k=5, threshold=0.7
+    Qdrant-->>RAG: Top 5 relevant chunks
+
+    RAG->>RAG: Re-rank by relevance
+    RAG->>LLM: Generate answer with context
+    Note over LLM: Prompt: query + top 5 chunks
+
+    loop Stream tokens
+        LLM-->>API: Token chunk
+        API-->>ChatUI: SSE: {type: "token", data: "To"}
+        ChatUI->>ChatUI: Append to message
+    end
+
+    LLM-->>API: Complete with citations
+    API->>Redis: Cache response
+    API-->>ChatUI: SSE: {type: "complete", citations: [...]}
+    ChatUI-->>User: Display answer with doc links
+
+    %% Scenario 2: Data Query with Text-to-SQL
+    Note over User,Table: Scenario 2: Natural Language Data Query
+    User->>ChatUI: "Show my invoices from last month"
+    ChatUI->>API: POST /chat/sessions/:id/messages
+    API->>Intent: Classify intent
+    Intent-->>API: Intent: data_query
+
+    API->>SQL: generate_sql(query, user_context)
+
+    %% Check cache first
+    SQL->>Redis: Check query cache
+    Redis-->>SQL: Cache miss
+
+    SQL->>LLM: Generate SQL from natural language
+    Note over LLM: Text-to-SQL with schema context
+    LLM-->>SQL: SQL query string
+
+    SQL->>SQL: Validate SQL syntax
+    SQL->>SQL: Check permissions & scope
+    Note over SQL: Inject WHERE user_id = current_user
+
+    SQL->>DB: Execute validated SQL
+    Note over DB: SELECT * FROM invoices<br/>WHERE user_id = :user_id<br/>AND invoice_date >= :start_date
+    DB-->>SQL: Query results (50 rows)
+
+    SQL->>SQL: Format as JSON table
+    SQL->>Redis: Cache query + results
+
+    API-->>ChatUI: SSE: {type: "data_table", data: {...}}
+    ChatUI->>Table: Render table view
+    Table-->>User: Display sortable table
+
+    %% Scenario 3: Mixed Query (RAG + SQL)
+    Note over User,Table: Scenario 3: Complex Query (RAG + Data)
+    User->>ChatUI: "What's my total spend? Explain the calculation"
+    ChatUI->>API: POST /chat/sessions/:id/messages
+    API->>Intent: Classify intent
+    Intent-->>API: Intent: hybrid_query
+
+    %% First get data
+    par Get Data
+        API->>SQL: Calculate total spend
+        SQL->>DB: SUM query
+        DB-->>SQL: Total: $45,230.50
+    and Get Context
+        API->>RAG: Search "invoice totals calculation"
+        RAG->>Qdrant: Vector search
+        Qdrant-->>RAG: Documentation chunks
+    end
+
+    %% Combine and generate response
+    API->>LLM: Generate explanation with data + docs
+    Note over LLM: Context: $45,230.50 + formula docs
+
+    loop Stream response
+        LLM-->>API: Token chunk
+        API-->>ChatUI: SSE stream
+    end
+
+    API-->>ChatUI: SSE: {type: "complete", data_included: true}
+    ChatUI-->>User: "Your total spend is $45,230.50..."
+
+    %% Scenario 4: Action Request with Confirmation
+    Note over User,Table: Scenario 4: Action with Confirmation
+    User->>ChatUI: "Create invoice for Acme Corp, $1000"
+    ChatUI->>API: POST /chat/sessions/:id/messages
+    API->>Intent: Classify intent
+    Intent-->>API: Intent: action_request
+
+    API->>Intent: Extract action parameters
+    Note over Intent: entity: invoice<br/>action: create<br/>params: {company, amount}
+
+    API-->>ChatUI: SSE: {type: "confirmation_required", action: {...}}
+    ChatUI->>ChatUI: Show confirmation dialog
+    ChatUI-->>User: "Confirm: Create invoice for Acme Corp?"
+
+    User->>ChatUI: Click "Confirm"
+    ChatUI->>API: POST /chat/confirm-action
+    API->>DB: INSERT INTO invoices
+    DB-->>API: Invoice created (ID: abc-123)
+
+    API-->>ChatUI: SSE: {type: "action_complete", invoice_id: "abc-123"}
+    ChatUI-->>User: "Invoice created! View invoice →"
+
+    %% Scenario 5: Error Handling
+    Note over User,Table: Scenario 5: Error Handling
+    User->>ChatUI: "Show invoices for all users"
+    ChatUI->>API: POST /chat/sessions/:id/messages
+    API->>Intent: Classify intent
+    Intent-->>API: Intent: data_query
+
+    API->>SQL: generate_sql(query)
+    SQL->>LLM: Generate SQL
+    LLM-->>SQL: SELECT * FROM invoices (no user filter!)
+
+    SQL->>SQL: Validate permissions
+    Note over SQL: ERROR: Query accesses<br/>unauthorized data
+
+    SQL-->>API: Permission denied error
+    API->>LLM: Generate friendly error message
+    LLM-->>API: Explanation text
+
+    API-->>ChatUI: SSE: {type: "error", message: "..."}
+    ChatUI-->>User: "I can only show YOUR invoices..."
